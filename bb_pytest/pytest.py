@@ -133,11 +133,10 @@ class Pytest(ShellCommand):
     testpath = UNSPECIFIED  # required (but can be None)
     testChanges = False  # TODO: needs better name
     recurse = False
-    reactor = None
     randomly = False
     tests = None  # required
 
-    def __init__(self, reactor=UNSPECIFIED, python=None, pytest=None,
+    def __init__(self, python=None, pytest=None,
                  testpath=UNSPECIFIED,
                  tests=None, testChanges=None,
                  recurse=None, randomly=None,
@@ -193,11 +192,6 @@ class Pytest(ShellCommand):
                         modules listed in 'tests'. This does not appear to be
                         necessary when using testChanges.
 
-        @type  reactor: string
-        @param reactor: which reactor to use, like 'gtk' or 'java'. If not
-                        provided, the Twisted's usual platform-dependent
-                        default is used.
-
         @type  randomly: boolean
         @param randomly: if True, add the --random=0 argument, which instructs
                          pytest to run the unit tests in a random order each
@@ -245,9 +239,6 @@ class Pytest(ShellCommand):
             raise ValueError("You must specify testpath= (it can be None)")
         assert isinstance(self.testpath, str) or self.testpath is None
 
-        if reactor is not UNSPECIFIED:
-            self.reactor = reactor
-
         if tests is not None:
             self.tests = tests
         if type(self.tests) is str:
@@ -271,20 +262,13 @@ class Pytest(ShellCommand):
         command.append(self.pytest)
         if self.recurse:
             command.append("--recurse")
-        if self.reactor:
-            command.append("--reactor=%s" % reactor)
         if self.randomly:
             command.append("--random=0")
         command.extend(self.pytestArgs)
         self.command = command
 
-        if self.reactor:
-            self.description = ["testing", "(%s)" % self.reactor]
-            self.descriptionDone = ["tests"]
-            # commandComplete adds (reactorname) to self.text
-        else:
-            self.description = ["testing"]
-            self.descriptionDone = ["tests"]
+        self.description = ["testing"]
+        self.descriptionDone = ["tests"]
 
         # this counter will feed Progress along the 'test cases' metric
         self.addLogObserver('stdio',
@@ -390,24 +374,11 @@ class Pytest(ShellCommand):
                 if not text2:
                     text2 = "tests"
 
-        if self.reactor:
-            text.append(self.rtext('(%s)'))
-            if text2:
-                text2 = "%s %s" % (text2, self.rtext('(%s)'))
-
         self.results = results
         self.text = text
         self.text2 = [text2]
 
-    def rtext(self, fmt='%s'):
-        if self.reactor:
-            rtext = fmt % self.reactor
-            return rtext.replace("reactor", "")
-        return ""
-
     def addTestResult(self, testname, results, text, tlog):
-        if self.reactor is not None:
-            testname = (self.reactor,) + testname
         tr = testresult.TestResult(testname, results, text, logs={'log': tlog})
         #self.step_status.build.addTestResult(tr)
         self.build.build_status.addTestResult(tr)
