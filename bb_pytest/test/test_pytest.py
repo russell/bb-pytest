@@ -142,3 +142,19 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
         )
         self.expectOutcome(result=FAILURE, status_text=['3 tests', '1 failure'])
         return self.runStep()
+
+    def test_run_plural_with_skips(self):
+        self.setupStep(
+                pytest.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout="collected 3 items\n==== 0 failed, 2 passed, 1 skipped in 11.1 seconds =====\n")
+            + 0
+        )
+        self.expectOutcome(result=SUCCESS, status_text=['3 tests', 'passed', '1 skip'])
+        return self.runStep()
