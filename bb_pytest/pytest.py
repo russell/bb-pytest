@@ -132,13 +132,11 @@ class Pytest(ShellCommand):
     pytestArgs = ["-v"]
     testpath = UNSPECIFIED  # required (but can be None)
     testChanges = False  # TODO: needs better name
-    randomly = False
     tests = None  # required
 
     def __init__(self, python=None, pytest=None,
                  testpath=UNSPECIFIED,
                  tests=None, testChanges=None,
-                 randomly=None,
                  pytestMode=None, pytestArgs=None,
                  **kwargs):
         """
@@ -184,14 +182,6 @@ class Pytest(ShellCommand):
                             to pytest and ask it to look for test-case-name
                             tags, running just the tests necessary to cover the
                             changes.
-
-        @type  randomly: boolean
-        @param randomly: if True, add the --random=0 argument, which instructs
-                         pytest to run the unit tests in a random order each
-                         time. This occasionally catches problems that might be
-                         masked when one module always runs before another
-                         (like failing to make registerAdapter calls before
-                         lookups are done).
 
         @type  kwargs: dict
         @param kwargs: parameters. The following parameters are inherited from
@@ -242,16 +232,11 @@ class Pytest(ShellCommand):
         if not self.testChanges and self.tests is None:
             raise ValueError("Must either set testChanges= or provide tests=")
 
-        if randomly is not None:
-            self.randomly = randomly
-
         # build up most of the command, then stash it until start()
         command = []
         if self.python:
             command.extend(self.python)
         command.append(self.pytest)
-        if self.randomly:
-            command.append("--random=0")
         command.extend(self.pytestArgs)
         self.command = command
 
