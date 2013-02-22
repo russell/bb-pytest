@@ -28,6 +28,8 @@ except ImportError:
     import StringIO
 import re
 
+RESULTS_LINE = r'=+ (\d+) failed, (\d+) passed, (\d+) skipped in ([\d.]+) seconds =+'
+
 
 def countFailedTests(output):
     # start scanning 10kb from the end, because there might be a few kb of
@@ -42,43 +44,23 @@ def countFailedTests(output):
     #  or 'FAILED (failures=1)'
     #  or "PASSED (skips=N, successes=N)"  (for Twisted-2.0)
     # there might be other lines dumped here. Scan all the lines.
-    res = {'total': None,
+    res = {'total': 0,
            'failures': 0,
-           'errors': 0,
            'skips': 0,
-           'expectedFailures': 0,
-           'unexpectedSuccesses': 0,
            }
     for l in lines:
-        out = re.search(r'Ran (\d+) tests', l)
+        out = re.search(r'collected (\d+) items', l)
         if out:
             res['total'] = int(out.group(1))
-        if (l.startswith("OK") or
-            l.startswith("FAILED ") or
-            l.startswith("PASSED")):
+        if l.startswith("="):
             # the extra space on FAILED_ is to distinguish the overall
             # status from an individual test which failed. The lack of a
             # space on the OK is because it may be printed without any
             # additional text (if there are no skips,etc)
-            out = re.search(r'failures=(\d+)', l)
+            out = re.search(RESULTS_LINE, l)
             if out:
                 res['failures'] = int(out.group(1))
-            out = re.search(r'errors=(\d+)', l)
-            if out:
-                res['errors'] = int(out.group(1))
-            out = re.search(r'skips=(\d+)', l)
-            if out:
-                res['skips'] = int(out.group(1))
-            out = re.search(r'expectedFailures=(\d+)', l)
-            if out:
-                res['expectedFailures'] = int(out.group(1))
-            out = re.search(r'unexpectedSuccesses=(\d+)', l)
-            if out:
-                res['unexpectedSuccesses'] = int(out.group(1))
-            # successes= is a Twisted-2.0 addition, and is not currently used
-            out = re.search(r'successes=(\d+)', l)
-            if out:
-                res['successes'] = int(out.group(1))
+                res['skips'] = int(out.group(3))
 
     return res
 
@@ -243,6 +225,10 @@ class Pytest(ShellCommand):
         self.description = ["testing"]
         self.descriptionDone = ["tests"]
 
+        if not self.pytestMode in TEST_RE:
+            raise ValueError("pytestMode must be one of: %s" %
+                             ", ".join(TEST_RE.keys()))
+
         # this counter will feed Progress along the 'test cases' metric
         self.addLogObserver('stdio',
                             PytestTestCaseCounter(TEST_RE[self.pytestMode]))
@@ -286,7 +272,7 @@ class Pytest(ShellCommand):
         counts = countFailedTests(output)
 
         total = counts['total']
-        failures, errors = counts['failures'], counts['errors']
+        failures = counts['failures']
         parsed = (total is not None)
         text = []
         text2 = ""
@@ -309,16 +295,17 @@ class Pytest(ShellCommand):
             # something failed
             results = FAILURE
             if parsed:
-                text.append("tests")
+                if total:
+                    text += ["%d %s" %
+                             (total,
+                              total == 1 and "test" or "tests")]
+                else:
+                    text += ["no tests", "run"]
                 if failures:
                     text.append("%d %s" %
                                 (failures,
                                  failures == 1 and "failure" or "failures"))
-                if errors:
-                    text.append("%d %s" %
-                                (errors,
-                                 errors == 1 and "error" or "errors"))
-                count = failures + errors
+                count = failures
                 text2 = "%d tes%s" % (count, (count == 1 and 't' or 'ts'))
             else:
                 text += ["tests", "failed"]
@@ -328,24 +315,6 @@ class Pytest(ShellCommand):
             text.append("%d %s" %
                         (counts['skips'],
                          counts['skips'] == 1 and "skip" or "skips"))
-        if counts['expectedFailures']:
-            text.append("%d %s" %
-                        (counts['expectedFailures'],
-                         counts['expectedFailures'] == 1 and "todo"
-                         or "todos"))
-            if 0:  # TODO
-                results = WARNINGS
-                if not text2:
-                    text2 = "todo"
-
-        if 0:
-            # ignore unexpectedSuccesses for now, but it should really mark
-            # the build WARNING
-            if counts['unexpectedSuccesses']:
-                text.append("%d surprises" % counts['unexpectedSuccesses'])
-                results = WARNINGS
-                if not text2:
-                    text2 = "tests"
 
         self.results = results
         self.text = text

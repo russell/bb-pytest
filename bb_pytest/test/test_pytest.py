@@ -16,7 +16,7 @@
 
 from twisted.trial import unittest
 from bb_pytest import pytest
-from buildbot.status.results import SUCCESS
+from buildbot.status.results import SUCCESS, FAILURE
 from buildbot.test.util import steps
 from buildbot.test.fake.remotecommand import ExpectShell
 from buildbot.process.properties import Property
@@ -41,7 +41,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config",
                         env=dict(PYTHONPATH='somepath'))
-            + ExpectShell.log('stdio', stdout="Ran 0 tests\n")
+            + ExpectShell.log('stdio', stdout="collected 0 items\n")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['no tests', 'run'])
@@ -58,7 +58,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config",
                         env=dict(PYTHONPATH=['path1', 'path2', 'path3']))
-            + ExpectShell.log('stdio', stdout="Ran 0 tests\n")
+            + ExpectShell.log('stdio', stdout="collected 0 items\n")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['no tests', 'run'])
@@ -75,7 +75,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config",
                         env=dict(PYTHONPATH=['path1', 'path2']))
-            + ExpectShell.log('stdio', stdout="Ran 0 tests\n")
+            + ExpectShell.log('stdio', stdout="collected 0 items\n")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['no tests', 'run'])
@@ -90,7 +90,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
-            + ExpectShell.log('stdio', stdout="Ran 1 tests\n")
+            + ExpectShell.log('stdio', stdout="collected 1 items\n")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['1 test', 'passed'])
@@ -105,7 +105,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
-            + ExpectShell.log('stdio', stdout="Ran 2 tests\n")
+            + ExpectShell.log('stdio', stdout="collected 2 items\n")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['2 tests', 'passed'])
@@ -121,8 +121,24 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
-            + ExpectShell.log('stdio', stdout="Ran 2 tests\n")
+            + ExpectShell.log('stdio', stdout="collected 2 items\n")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['2 tests', 'passed'])
+        return self.runStep()
+
+    def test_run_plural_with_failures(self):
+        self.setupStep(
+                pytest.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout="collected 3 items\n==== 1 failed, 2 passed, 0 skipped in 10.1 seconds =====\n")
+            + 1
+        )
+        self.expectOutcome(result=FAILURE, status_text=['3 tests', '1 failure'])
         return self.runStep()
