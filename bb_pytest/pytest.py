@@ -132,14 +132,13 @@ class Pytest(ShellCommand):
     pytestArgs = ["-v"]
     testpath = UNSPECIFIED  # required (but can be None)
     testChanges = False  # TODO: needs better name
-    recurse = False
     randomly = False
     tests = None  # required
 
     def __init__(self, python=None, pytest=None,
                  testpath=UNSPECIFIED,
                  tests=None, testChanges=None,
-                 recurse=None, randomly=None,
+                 randomly=None,
                  pytestMode=None, pytestArgs=None,
                  **kwargs):
         """
@@ -185,12 +184,6 @@ class Pytest(ShellCommand):
                             to pytest and ask it to look for test-case-name
                             tags, running just the tests necessary to cover the
                             changes.
-
-        @type  recurse: boolean
-        @param recurse: If True, pass the --recurse option to pytest, allowing
-                        test cases to be found in deeper subdirectories of the
-                        modules listed in 'tests'. This does not appear to be
-                        necessary when using testChanges.
 
         @type  randomly: boolean
         @param randomly: if True, add the --random=0 argument, which instructs
@@ -245,13 +238,10 @@ class Pytest(ShellCommand):
             self.tests = [self.tests]
         if testChanges is not None:
             self.testChanges = testChanges
-            #self.recurse = True  # not sure this is necessary
 
         if not self.testChanges and self.tests is None:
             raise ValueError("Must either set testChanges= or provide tests=")
 
-        if recurse is not None:
-            self.recurse = recurse
         if randomly is not None:
             self.randomly = randomly
 
@@ -260,8 +250,6 @@ class Pytest(ShellCommand):
         if self.python:
             command.extend(self.python)
         command.append(self.pytest)
-        if self.recurse:
-            command.append("--recurse")
         if self.randomly:
             command.append("--random=0")
         command.extend(self.pytestArgs)
