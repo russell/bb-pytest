@@ -347,7 +347,7 @@ class Pytest(ShellCommand):
                 warning = line
                 warnings[warning] = warnings.get(warning, 0) + 1
 
-            if line.find("=" * 60) == 0 or line.find("-" * 60) == 0:
+            if line.startswith("=") and re.search(r'^=+ FAILURES =+$', line):
                 problems += line
                 problems += sio.read()
                 break

@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from twisted.trial import unittest
-from bb_pytest import pytest
+from bb_pytest import step
 from buildbot.status.results import SUCCESS, FAILURE
 from buildbot.test.util import steps
 from buildbot.test.fake.remotecommand import ExpectShell
@@ -32,7 +32,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
 
     def test_run_env(self):
         self.setupStep(
-                pytest.Pytest(workdir='build',
+                step.Pytest(workdir='build',
                               tests='testname',
                               testpath=None,
                               env={'PYTHONPATH': 'somepath'}))
@@ -49,7 +49,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
 
     def test_run_env_supplement(self):
         self.setupStep(
-                pytest.Pytest(workdir='build',
+                step.Pytest(workdir='build',
                                      tests='testname',
                                      testpath='path1',
                                      env={'PYTHONPATH': ['path2','path3']}))
@@ -66,7 +66,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
 
     def test_run_env_nodupe(self):
         self.setupStep(
-                pytest.Pytest(workdir='build',
+                step.Pytest(workdir='build',
                               tests='testname',
                               testpath='path2',
                               env={'PYTHONPATH': ['path1','path2']}))
@@ -83,7 +83,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
 
     def test_run_singular(self):
         self.setupStep(
-                pytest.Pytest(workdir='build',
+                step.Pytest(workdir='build',
                                      tests='testname',
                                      testpath=None))
         self.expectCommands(
@@ -98,7 +98,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
 
     def test_run_plural(self):
         self.setupStep(
-                pytest.Pytest(workdir='build',
+                step.Pytest(workdir='build',
                               tests='testname',
                               testpath=None))
         self.expectCommands(
@@ -112,7 +112,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
         return self.runStep()
 
     def testProperties(self):
-        self.setupStep(pytest.Pytest(workdir='build',
+        self.setupStep(step.Pytest(workdir='build',
                                      tests=Property('test_list'),
                                      testpath=None))
         self.properties.setProperty('test_list', ['testname'], 'Test')
@@ -129,7 +129,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
 
     def test_run_plural_with_failures(self):
         self.setupStep(
-                pytest.Pytest(workdir='build',
+                step.Pytest(workdir='build',
                               tests='testname',
                               testpath=None))
         self.expectCommands(
@@ -145,7 +145,7 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
 
     def test_run_plural_with_skips(self):
         self.setupStep(
-                pytest.Pytest(workdir='build',
+                step.Pytest(workdir='build',
                               tests='testname',
                               testpath=None))
         self.expectCommands(
