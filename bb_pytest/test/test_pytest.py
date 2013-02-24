@@ -55,9 +55,9 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
     def test_run_env_supplement(self):
         self.setupStep(
                 step.Pytest(workdir='build',
-                                     tests='testname',
-                                     testpath='path1',
-                                     env={'PYTHONPATH': ['path2','path3']}))
+                            tests='testname',
+                            testpath='path1',
+                            env={'PYTHONPATH': ['path2', 'path3']}))
         self.expectCommands(
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
@@ -72,9 +72,9 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
     def test_run_env_nodupe(self):
         self.setupStep(
                 step.Pytest(workdir='build',
-                              tests='testname',
-                              testpath='path2',
-                              env={'PYTHONPATH': ['path1','path2']}))
+                            tests='testname',
+                            testpath='path2',
+                            env={'PYTHONPATH': ['path1', 'path2']}))
         self.expectCommands(
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
@@ -142,10 +142,13 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
             + ExpectShell.log('stdio',
-                              stdout="collected 3 items\n==== 1 failed, 2 passed, 0 skipped in 10.1 seconds =====\n")
+                              stdout="""collected 3 items
+==== 1 failed, 2 passed, 0 skipped in 10.1 seconds =====
+""")
             + 1
         )
-        self.expectOutcome(result=FAILURE, status_text=['3 tests', '1 failure'])
+        self.expectOutcome(result=FAILURE,
+                           status_text=['3 tests', '1 failure'])
         return self.runStep()
 
     def test_run_plural_with_skips(self):
@@ -158,7 +161,9 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
             + ExpectShell.log('stdio',
-                              stdout="collected 3 items\n==== 0 failed, 2 passed, 1 skipped in 11.1 seconds =====\n")
+                              stdout="""collected 3 items
+==== 0 failed, 2 passed, 1 skipped in 11.1 seconds =====
+""")
             + 0
         )
         self.expectOutcome(result=SUCCESS,
