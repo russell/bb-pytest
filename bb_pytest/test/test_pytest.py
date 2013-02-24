@@ -14,15 +14,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import subprocess
+from subprocess import Popen
+from os.path import abspath, dirname
+
 from twisted.trial import unittest
-from bb_pytest import step
 from buildbot.status.results import SUCCESS, FAILURE
 from buildbot.test.util import steps
 from buildbot.test.fake.remotecommand import ExpectShell
 from buildbot.process.properties import Property
 
+from bb_pytest import step
 
-class Trial(steps.BuildStepMixin, unittest.TestCase):
+
+class Pytest(steps.BuildStepMixin, unittest.TestCase):
 
     def setUp(self):
         return self.setUpBuildStep()
@@ -156,5 +161,47 @@ class Trial(steps.BuildStepMixin, unittest.TestCase):
                               stdout="collected 3 items\n==== 0 failed, 2 passed, 1 skipped in 11.1 seconds =====\n")
             + 0
         )
-        self.expectOutcome(result=SUCCESS, status_text=['3 tests', 'passed', '1 skip'])
+        self.expectOutcome(result=SUCCESS,
+                           status_text=['3 tests', 'passed', '1 skip'])
+        return self.runStep()
+
+MODULE_DIR = abspath(dirname(__file__))
+FIXTURE_PATH = MODULE_DIR + "/fixture.py"
+
+
+def call_pytest():
+    print FIXTURE_PATH
+    print ['py.test', FIXTURE_PATH]
+    pytest = Popen(['py.test', FIXTURE_PATH],
+                   stdout=subprocess.PIPE)
+    return pytest.communicate()
+
+
+class PytestIntegration(steps.BuildStepMixin, unittest.TestCase):
+
+    def setUp(self):
+        self.pytest_stdout = open(MODULE_DIR + "/fixture.stdout").read()
+        self.pytest_problems = open(MODULE_DIR + "/fixture.problems").read()
+        return self.setUpBuildStep()
+
+    def tearDown(self):
+        return self.tearDownBuildStep()
+
+    def test_pytest_problems(self):
+        self.setupStep(
+                step.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout=self.pytest_stdout)
+            + 1
+        )
+        self.expectOutcome(result=FAILURE,
+                           status_text=['9 tests', '3 failures', '2 skips'])
+        self.expectLogfile(logfile='problems', contents=self.pytest_problems)
+
         return self.runStep()

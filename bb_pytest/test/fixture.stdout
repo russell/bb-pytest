@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux2 -- Python 2.7.3 -- pytest-2.3.4
+plugins: xdist
+collected 9 items
+
+../bb_pytest/test/fixture.py .F.s.s.FF
+
+=================================== FAILURES ===================================
+________________________________ test_failure1 _________________________________
+
+    def test_failure1():
+>       assert False
+E       assert False
+
+../bb_pytest/test/fixture.py:9: AssertionError
+________________________________ test_failure2 _________________________________
+
+    def test_failure2():
+>       assert False
+E       assert False
+
+../bb_pytest/test/fixture.py:33: AssertionError
+________________________________ test_failure3 _________________________________
+
+    def test_failure3():
+>       assert False
+E       assert False
+
+../bb_pytest/test/fixture.py:37: AssertionError
+================ 3 failed, 4 passed, 2 skipped in 0.02 seconds =================
