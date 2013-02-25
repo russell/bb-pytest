@@ -283,7 +283,7 @@ class Pytest(ShellCommand):
         text = []
         text2 = ""
 
-        if not cmd.didFail():
+        if cmd.rc == 0:
             if parsed:
                 results = SUCCESS
                 if total:
