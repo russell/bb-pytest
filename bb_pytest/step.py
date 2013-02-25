@@ -84,17 +84,16 @@ class PytestTestCaseCounter(LogLineObserver):
             self.finished = True
             return
 
-        m = self._line_re.search(line.strip())
+        m = re.search(self._line_re, line.strip())
         if m:
-            testname, result = m.groups()
             self.numTests += 1
             self.step.setProgress('tests', self.numTests)
 
 
 UNSPECIFIED = ()  # since None is a valid choice
 
-TEST_RE = {"pytest": "^(?P<path>.+):\d+: (?P<testname>.+) (?P<status>.+)$",
-            "xdist": "^\[.+\] (?P<status>.+) (?P<path>.+):\d+: (?P<testname>.+)$"}
+TEST_RE = {"pytest": r"^(?P<path>.+):\d+: (?P<testname>.+) (?P<status>.+)$",
+            "xdist": r"^\[.+\] (?P<status>.+) (?P<path>.+):\d+: (?P<testname>.+)$"}
 
 
 class Pytest(ShellCommand):
@@ -173,6 +172,13 @@ class Pytest(ShellCommand):
                        timeout.
         """
         ShellCommand.__init__(self, **kwargs)
+        self.addFactoryArguments(python=python,
+                                 pytest=pytest,
+                                 testpath=testpath,
+                                 tests=tests,
+                                 testChanges=testChanges,
+                                 pytestMode=pytestMode,
+                                 pytestArgs=pytestArgs)
 
         if python:
             self.python = python
