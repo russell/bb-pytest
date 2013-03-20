@@ -28,7 +28,13 @@ except ImportError:
     import StringIO
 import re
 
-RESULTS_LINE = r'=+ (\d+) failed, (\d+) passed, (\d+) skipped in ([\d.]+) seconds =+'
+RESULTS_LINE = r"=+ ((?P<failures>\d+) failed|)(,? (?P<passed>\d+) passed|)(,? (?P<skips>\d+) skipped|) in [\d.]+ seconds =+"
+
+
+def int_or_zero(i):
+    if i is None:
+        return 0
+    return int(i)
 
 
 def countFailedTests(output):
@@ -59,9 +65,10 @@ def countFailedTests(output):
             # additional text (if there are no skips,etc)
             out = re.search(RESULTS_LINE, l)
             if out:
-                res['failures'] = int(out.group(1))
-                res['skips'] = int(out.group(3))
-
+                print out.groupdict().items()
+                res.update(dict([(k, int_or_zero(v))
+                                 for k, v in out.groupdict().items()]))
+    print res
     return res
 
 

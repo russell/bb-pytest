@@ -185,14 +185,14 @@ def call_pytest():
 class PytestIntegration(steps.BuildStepMixin, unittest.TestCase):
 
     def setUp(self):
-        self.pytest_stdout = open(MODULE_DIR + "/fixture.stdout").read()
-        self.pytest_problems = open(MODULE_DIR + "/fixture.problems").read()
         return self.setUpBuildStep()
 
     def tearDown(self):
         return self.tearDownBuildStep()
 
     def test_pytest_problems(self):
+        pytest_stdout = open(MODULE_DIR + "/fixture.stdout").read()
+        pytest_problems = open(MODULE_DIR + "/fixture.problems").read()
         self.setupStep(
                 step.Pytest(workdir='build',
                               tests='testname',
@@ -202,11 +202,32 @@ class PytestIntegration(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
             + ExpectShell.log('stdio',
-                              stdout=self.pytest_stdout)
+                              stdout=pytest_stdout)
             + 1
         )
         self.expectOutcome(result=FAILURE,
                            status_text=['9 tests', '3 failures', '2 skips'])
-        self.expectLogfile(logfile='problems', contents=self.pytest_problems)
+        self.expectLogfile(logfile='problems', contents=pytest_problems)
+
+        return self.runStep()
+
+    def test_pytest_problems(self):
+        pytest_stdout = open(MODULE_DIR + "/fixture_failures.stdout").read()
+        pytest_problems = open(MODULE_DIR + "/fixture_failures.problems").read()
+        self.setupStep(
+                step.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout=pytest_stdout)
+            + 1
+        )
+        self.expectOutcome(result=FAILURE,
+                           status_text=['53 tests', '37 failures'])
+        self.expectLogfile(logfile='problems', contents=pytest_problems)
 
         return self.runStep()
