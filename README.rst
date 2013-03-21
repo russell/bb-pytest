@@ -39,11 +39,11 @@ Example
   f = factory.BuildFactory()
 
   f.Factory.addStep(
-      Pytest(
-          pytest="py.test",
-          pytestArgs=['-u', '-i'],
-          testpath=None,
-          tests=[""],
+      Pytest(
+          pytest="py.test",
+          pytestArgs=['-u', '-i'],
+          testpath=None,
+          tests=[""],
           flunkOnFailure=True))
 
 
