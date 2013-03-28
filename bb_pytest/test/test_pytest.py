@@ -19,7 +19,7 @@ from subprocess import Popen
 from os.path import abspath, dirname
 
 from twisted.trial import unittest
-from buildbot.status.results import SUCCESS, FAILURE
+from buildbot.status.results import SUCCESS, FAILURE, WARNINGS
 from buildbot.test.util import steps
 from buildbot.test.fake.remotecommand import ExpectShell
 from buildbot.process.properties import Property
@@ -169,6 +169,68 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
         self.expectOutcome(result=SUCCESS,
                            status_text=['3 tests', 'passed', '1 skip'])
         return self.runStep()
+
+    def test_run_with_xfail(self):
+        self.setupStep(
+                step.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout="""collected 12 items
+
+===== 5 passed, 2 skipped, 4 deselected, 1 xfailed in 0.02 seconds =====
+""")
+            + 0
+        )
+        self.expectOutcome(result=WARNINGS,
+                           status_text=['12 tests', '2 skips', '1 todo', '4 deselected'])
+        return self.runStep()
+
+    def test_run_with_passing_xfail(self):
+        self.setupStep(
+                step.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout="""collected 11 items
+
+===== 3 failed, 5 passed, 2 skipped, 1 xfailed, 1 xpassed in 0.03 seconds ======
+""")
+            + 0
+        )
+        self.expectOutcome(result=WARNINGS,
+                           status_text=['11 tests', '2 skips', '1 todo', '1 surprises'])
+        return self.runStep()
+
+    def test_run_with_deselected(self):
+        self.setupStep(
+                step.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout="""collected 11 items
+
+===== 6 tests deselected by "-m 'not failure and not skipped'" =====
+==== 5 passed, 6 deselected in 0.01 seconds ====
+""")
+            + 0
+        )
+        self.expectOutcome(result=SUCCESS,
+                           status_text=['11 tests', 'passed', '6 deselected'])
+        return self.runStep()
+
 
 MODULE_DIR = abspath(dirname(__file__))
 FIXTURE_PATH = MODULE_DIR + "/fixture.py"

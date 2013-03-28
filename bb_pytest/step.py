@@ -28,7 +28,7 @@ except ImportError:
     import StringIO
 import re
 
-RESULTS_LINE = r"=+ ((?P<failures>\d+) failed|)(,? (?P<passed>\d+) passed|)(,? (?P<skips>\d+) skipped|) in [\d.]+ seconds =+"
+RESULTS_LINE = r"=+ ((?P<failures>\d+) failed|)(,? ?(?P<passed>\d+) passed|)(,? ?(?P<skips>\d+) skipped|)(,? ?(?P<deselected>\d+) deselected|)(,? ?(?P<expectedFailures>\d+) xfailed|)(,? ?(?P<unexpectedSuccesses>\d+) xpassed|) in [\d.]+ seconds =+"
 
 
 def int_or_zero(i):
@@ -53,6 +53,9 @@ def countFailedTests(output):
     res = {'total': 0,
            'failures': 0,
            'skips': 0,
+           'deselected': 0,
+           'expectedFailures': 0,
+           'unexpectedSuccesses': 0,
            }
     for l in lines:
         out = re.search(r'collected (\d+) items', l)
@@ -65,10 +68,8 @@ def countFailedTests(output):
             # additional text (if there are no skips,etc)
             out = re.search(RESULTS_LINE, l)
             if out:
-                print out.groupdict().items()
                 res.update(dict([(k, int_or_zero(v))
                                  for k, v in out.groupdict().items()]))
-    print res
     return res
 
 
@@ -297,7 +298,9 @@ class Pytest(ShellCommand):
                     text += ["%d %s" %
                              (total,
                               total == 1 and "test" or "tests"),
-                             "passed"]
+                             ]
+                    if ((not counts['expectedFailures']) and (not counts['unexpectedSuccesses'])):
+                        text += ["passed"]
                 else:
                     text += ["no tests", "run"]
             else:
@@ -329,6 +332,25 @@ class Pytest(ShellCommand):
                         (counts['skips'],
                          counts['skips'] == 1 and "skip" or "skips"))
 
+        if counts['expectedFailures']:
+            text.append("%d %s" %  \
+                        (counts['expectedFailures'],
+                         counts['expectedFailures'] == 1 and "todo"
+                         or "todos"))
+            results = WARNINGS
+            if not text2:
+                text2 = "todo"
+
+        if counts['unexpectedSuccesses']:
+            text.append("%d surprises" % counts['unexpectedSuccesses'])
+            results = WARNINGS
+            if not text2:
+                text2 = "tests"
+
+        if counts['deselected']:
+            text.append("%d %s" %
+                        (counts['deselected'],
+                         "deselected"))
         self.results = results
         self.text = text
         self.text2 = [text2]
