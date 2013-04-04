@@ -95,7 +95,10 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
-            + ExpectShell.log('stdio', stdout="collected 1 items\n")
+            + ExpectShell.log('stdio', stdout="""collected 2 items
+
+==== 1 passed in 11.1 seconds =====
+""")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['1 test', 'passed'])
@@ -110,7 +113,10 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
-            + ExpectShell.log('stdio', stdout="collected 2 items\n")
+            + ExpectShell.log('stdio', stdout="""collected 2 items
+
+==== 2 passed in 11.1 seconds =====
+""")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['2 tests', 'passed'])
@@ -126,7 +132,10 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
             ExpectShell(workdir='build',
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
-            + ExpectShell.log('stdio', stdout="collected 2 items\n")
+            + ExpectShell.log('stdio', stdout="""collected 2 items
+
+==== 2 passed in 11.1 seconds =====
+""")
             + 0
         )
         self.expectOutcome(result=SUCCESS, status_text=['2 tests', 'passed'])
@@ -180,7 +189,7 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
             + ExpectShell.log('stdio',
-                              stdout="""collected 12 items
+                              stdout="""collecting ... collected 12 items
 
 ===== 5 passed, 2 skipped, 4 deselected, 1 xfailed in 0.02 seconds =====
 """)
@@ -200,9 +209,9 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
                         command=['py.test', '-v', 'testname'],
                         usePTY="slave-config")
             + ExpectShell.log('stdio',
-                              stdout="""collected 11 items
+                              stdout="""collecting ... collected 11 items
 
-===== 3 failed, 5 passed, 2 skipped, 1 xfailed, 1 xpassed in 0.03 seconds ======
+===== 3 failed, 4 passed, 2 skipped, 1 xfailed, 1 xpassed in 0.03 seconds ======
 """)
             + 0
         )
@@ -231,6 +240,32 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
                            status_text=['11 tests', 'passed', '6 deselected'])
         return self.runStep()
 
+    def test_fail_run_with_deselected(self):
+        self.setupStep(
+                step.Pytest(workdir='build',
+                              tests='testname',
+                              pytestMode="xdist",
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout="""============================= test session starts ==============================
+platform linux2 -- Python 2.6.5 -- pytest-2.3.4 -- /usr/bin/python
+plugins: xdist
+collecting ... collected 11 items
+
+------------------------------- Captured stderr --------------------------------
+2013-04-04 08:35:48,752 INFO Starting new HTTP connection (1): example.com
+===== 6 tests deselected by "-m 'not failure and not skipped'" =====
+==== 1 failed, 4 passed, 6 deselected in 0.01 seconds ====
+""")
+            + 1
+        )
+        self.expectOutcome(result=FAILURE,
+                           status_text=['11 tests', '1 failure', '6 deselected'])
+        return self.runStep()
 
 MODULE_DIR = abspath(dirname(__file__))
 FIXTURE_PATH = MODULE_DIR + "/fixture.py"

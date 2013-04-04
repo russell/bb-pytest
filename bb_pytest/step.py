@@ -58,9 +58,6 @@ def countFailedTests(output):
            'unexpectedSuccesses': 0,
            }
     for l in lines:
-        out = re.search(r'collected (\d+) items', l)
-        if out:
-            res['total'] = int(out.group(1))
         if l.startswith("="):
             # the extra space on FAILED_ is to distinguish the overall
             # status from an individual test which failed. The lack of a
@@ -70,6 +67,8 @@ def countFailedTests(output):
             if out:
                 res.update(dict([(k, int_or_zero(v))
                                  for k, v in out.groupdict().items()]))
+            if res['total'] == 0:
+                res['total'] = sum(res.values())
     return res
 
 
