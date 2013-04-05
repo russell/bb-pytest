@@ -28,7 +28,7 @@ except ImportError:
     import StringIO
 import re
 
-RESULTS_LINE = r"=+ ((?P<failures>\d+) failed|)(,? ?(?P<passed>\d+) passed|)(,? ?(?P<skips>\d+) skipped|)(,? ?(?P<deselected>\d+) deselected|)(,? ?(?P<expectedFailures>\d+) xfailed|)(,? ?(?P<unexpectedSuccesses>\d+) xpassed|) in [\d.]+ seconds =+"
+RESULTS_LINE = r"=+ ((?P<failures>\d+) failed|)(,? ?(?P<passed>\d+) passed|)(,? ?(?P<skips>\d+) skipped|)(,? ?(?P<deselected>\d+) deselected|)(,? ?(?P<expectedFailures>\d+) xfailed|)(,? ?(?P<unexpectedSuccesses>\d+) xpassed|)(,? ?(?P<error>\d+) error|) in [\d.]+ seconds =+"
 
 
 def int_or_zero(i):
@@ -53,6 +53,7 @@ def countFailedTests(output):
     res = {'total': 0,
            'failures': 0,
            'skips': 0,
+           'error': 0,
            'deselected': 0,
            'expectedFailures': 0,
            'unexpectedSuccesses': 0,
@@ -326,6 +327,12 @@ class Pytest(ShellCommand):
                 text += ["tests", "failed"]
                 text2 = "tests"
 
+        if counts['error']:
+            text.append("%d %s" %  \
+                        (counts['error'],
+                         counts['error'] == 1 and "error"
+                         or "errors"))
+
         if counts['skips']:
             text.append("%d %s" %
                         (counts['skips'],
@@ -336,15 +343,17 @@ class Pytest(ShellCommand):
                         (counts['expectedFailures'],
                          counts['expectedFailures'] == 1 and "todo"
                          or "todos"))
-            results = WARNINGS
-            if not text2:
-                text2 = "todo"
+            # XXX (RS) Disabled to keep inline with the trial runner
+            # results = WARNINGS
+            # if not text2:
+            #     text2 = "todo"
 
         if counts['unexpectedSuccesses']:
             text.append("%d surprises" % counts['unexpectedSuccesses'])
-            results = WARNINGS
-            if not text2:
-                text2 = "tests"
+            # XXX (RS) Disabled to keep inline with the trial runner
+            # results = WARNINGS
+            # if not text2:
+            #     text2 = "tests"
 
         if counts['deselected']:
             text.append("%d %s" %

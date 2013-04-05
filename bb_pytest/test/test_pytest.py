@@ -195,7 +195,7 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
 """)
             + 0
         )
-        self.expectOutcome(result=WARNINGS,
+        self.expectOutcome(result=SUCCESS,
                            status_text=['12 tests', '2 skips', '1 todo', '4 deselected'])
         return self.runStep()
 
@@ -215,7 +215,7 @@ class Pytest(steps.BuildStepMixin, unittest.TestCase):
 """)
             + 0
         )
-        self.expectOutcome(result=WARNINGS,
+        self.expectOutcome(result=SUCCESS,
                            status_text=['11 tests', '2 skips', '1 todo', '1 surprises'])
         return self.runStep()
 
@@ -266,6 +266,28 @@ collecting ... collected 11 items
         self.expectOutcome(result=FAILURE,
                            status_text=['11 tests', '1 failure', '6 deselected'])
         return self.runStep()
+
+    def test_run_with_error(self):
+        self.setupStep(
+                step.Pytest(workdir='build',
+                              tests='testname',
+                              testpath=None))
+        self.expectCommands(
+            ExpectShell(workdir='build',
+                        command=['py.test', '-v', 'testname'],
+                        usePTY="slave-config")
+            + ExpectShell.log('stdio',
+                              stdout="""collecting ... collected 11 items
+
+================== 408 tests deselected by "-m 'serialtest'" ===================
+======== 1 failed, 2 passed, 1 deselected, 3 error in 9.46 seconds ========
+""")
+            + 1
+        )
+        self.expectOutcome(result=FAILURE,
+                           status_text=['7 tests', '1 failure', '3 errors', '1 deselected'])
+        return self.runStep()
+
 
 MODULE_DIR = abspath(dirname(__file__))
 FIXTURE_PATH = MODULE_DIR + "/fixture.py"
