@@ -8,7 +8,7 @@ tests.
 Arguments
 ---------
 
-This test step is derived from the ShellCommand step.  So besides the
+This test step used ShellMixin. So besides the
 arguments listed below the following steps will also be accpeted and
 will behave as per the ShellCommand step: workdir, haltOnFailure,
 flunkOnWarnings, flunkOnFailure, warnOnWarnings, warnOnFailure,
@@ -28,6 +28,13 @@ pytestMode
   The mode that should used to track the progress of the step. Valid
   options are "pytest" or "xdist".
 
+pytestArgs
+  The pytest arguments to be passed on command line
+
+verbose
+  The pytest '-v' argument, also used to properly process output from pytest. ('-v' shall not be used in pytestArgs)
+
+
 Example
 -------
 
@@ -40,7 +47,7 @@ Example
 
   f.Factory.addStep(
       Pytest(
-          pytest="py.test",
+          pytest="pytest",
           pytestArgs=['-u', '-i'],
           testpath=None,
           tests=[""],

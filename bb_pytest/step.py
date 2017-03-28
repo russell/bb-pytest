@@ -183,10 +183,11 @@ class Pytest(BuildStep, ShellMixin):
 
         @type pytestArgs: list of strings
         @param pytestArgs: a list of arguments to pass to pytest, available to
-                          turn on any extra flags you like. Defaults to ['-v'].
+                          turn on any extra flags you like..
 
         @type verbose: boolean
         @param verbose: if True, pytest runs in verbose mode (-v), othervise not verbose.
+                        Defaults to True
 
         @type  tests: list of strings
         @param tests: a list of test modules to run, like
@@ -204,7 +205,7 @@ class Pytest(BuildStep, ShellMixin):
 
         @type  kwargs: dict
         @param kwargs: parameters. The following parameters are inherited from
-                       L{ShellCommand} and may be useful to set: workdir,
+                       L{ShellMixin} and may be useful to set: workdir,
                        haltOnFailure, flunkOnWarnings, flunkOnFailure,
                        warnOnWarnings, warnOnFailure, want_stdout, want_stderr,
                        timeout.
