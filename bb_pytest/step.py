@@ -33,7 +33,7 @@ from buildbot.process.buildstep import ShellMixin
 
 
 RE_LINE_COLLECTING = re.compile(r"^(collecting .*)(collected)(.*)(items)$")
-RE_LINE_TESTED = re.compile(r"^(==* )(.*)( ==*)$")
+RE_LINE_FAILURES = re.compile(r"^=+ FAILURES =+$")
 RE_LINE_RESULTS = re.compile(r"=+ ((?P<failures>\d+) failed|)(,? ?(?P<passed>\d+) passed|)(,? ?(?P<skips>\d+) skipped|)(,? ?(?P<deselected>\d+) deselected|)(,? ?(?P<expectedFailures>\d+) xfailed|)(,? ?(?P<unexpectedSuccesses>\d+) xpassed|)(,? ?(?P<error>\d+) error|) in [\d.]+ seconds =+")
 RE_TEST_MODES = {
     "pytest": re.compile(r"^(?P<path>.+):\d+: (?P<testname>.+) (?P<status>.+)$"),
@@ -48,7 +48,9 @@ class PytestTestCaseCounter(logobserver.LogLineObserver):
         self.numTests = 0
         self.totalTests = 0
         self.finished = False
+        self.collecting = True
         self.testing = False
+        self.catching = False
         logobserver.LogLineObserver.__init__(self)
 
     def outLineReceived(self, line):
@@ -59,7 +61,7 @@ class PytestTestCaseCounter(logobserver.LogLineObserver):
         if self.finished:
             return
 
-        if not self.testing:
+        if (not self.testing) and (not self.catching):
             m = RE_LINE_COLLECTING.search(line.strip())
             if m:
                 try:
@@ -68,11 +70,23 @@ class PytestTestCaseCounter(logobserver.LogLineObserver):
                     self.step.description.extend(["0", "of", str(self.totalTests), "tests"])
                     self.step.updateSummary()
                     self.testing = True
+                    self.collecting = False
+                    self.catching = False
                 except:
                     self.totalTests = -1
             return
 
-        if line.startswith("="):
+        # testing mode
+        if self.testing and line.startswith("="):
+            m = RE_LINE_FAILURES.search(line.strip())
+            if m:
+                self.step.catched_failures.append(line)
+                self.testing = False
+                self.catching = True
+                return
+
+        if (self.testing or self.catching) and line.startswith("="):
+            # check for final row with summary
             m = RE_LINE_RESULTS.search(line.strip())
             if m:
                 self.step.collected_results.update(dict([(k, 0 if v is None else int(v)) for k, v in m.groupdict().items()]))
@@ -81,12 +95,18 @@ class PytestTestCaseCounter(logobserver.LogLineObserver):
                 self.step.updateSummary()
                 self.finished = True
                 self.testing = False
-        elif line.strip():
+                self.catching = False
+                return
+ 
+        if self.testing and line.strip():
             self.numTests += 1
             self.step.description[1] = str(self.numTests)
             self.step.updateSummary()
-        else:
-            pass
+            return
+  
+        if self.catching:
+            self.step.catched_failures.append(line)
+            return
 
 
 UNSPECIFIED = ()  # since None is a valid choice
@@ -123,6 +143,8 @@ class Pytest(BuildStep, ShellMixin):
         'expectedFailures': 0,
         'unexpectedSuccesses': 0,
         }
+
+    catched_failures = []
 
     def __init__(self, python=None, pytest=None,
                  testpath=UNSPECIFIED,
@@ -274,6 +296,9 @@ class Pytest(BuildStep, ShellMixin):
 
         self.descriptionDone = self.finalDescription(cmd)
         self.updateSummary()
+
+        if self.catched_failures:
+            self.addCompleteLog("problems", "\n".join(self.catched_failures))
 
         defer.returnValue(cmd.results())
 
