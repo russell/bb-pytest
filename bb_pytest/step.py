@@ -33,6 +33,7 @@ from buildbot.process.buildstep import ShellMixin
 
 
 RE_LINE_COLLECTING = re.compile(r"^(collecting .*)(collected)(.*)(items)$")
+RE_LINE_COLLECTED = re.compile(r"^(collected)(.*)(items)$")
 RE_LINE_FAILURES = re.compile(r"^=+ FAILURES =+$")
 RE_LINE_RESULTS = re.compile(r"=+ ((?P<failures>\d+) failed|)(,? ?(?P<passed>\d+) passed|)(,? ?(?P<skips>\d+) skipped|)(,? ?(?P<deselected>\d+) deselected|)(,? ?(?P<expectedFailures>\d+) xfailed|)(,? ?(?P<unexpectedSuccesses>\d+) xpassed|)(,? ?(?P<error>\d+) error|) in [\d.]+ seconds =+")
 RE_TEST_MODES = {
@@ -62,10 +63,13 @@ class PytestTestCaseCounter(logobserver.LogLineObserver):
             return
 
         if (not self.testing) and (not self.catching):
-            m = RE_LINE_COLLECTING.search(line.strip())
+            if self.step.verbose:
+                m = RE_LINE_COLLECTING.search(line.strip())
+            else:
+                m = RE_LINE_COLLECTED.search(line.strip())
             if m:
                 try:
-                    collected = m.group(3)
+                    collected = m.group(3 if self.step.verbose else 2)
                     self.totalTests = int(collected)
                     self.step.description.extend(["0", "of", str(self.totalTests), "tests"])
                     self.step.updateSummary()
@@ -291,6 +295,17 @@ class Pytest(BuildStep, ShellMixin):
             self.env['PYTHONPATH'] = ppath
 
         cmd = yield self.makeRemoteShellCommand(command=command)
+
+        self.collected_results = {
+            'total': 0,
+            'failures': 0,
+            'skips': 0,
+            'error': 0,
+            'deselected': 0,
+            'expectedFailures': 0,
+            'unexpectedSuccesses': 0,
+            }
+        self.catched_failures = []
 
         yield self.runCommand(cmd)
 
