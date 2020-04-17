@@ -21,6 +21,7 @@ import subprocess
 from subprocess import Popen
 from os.path import abspath, dirname
 
+from buildbot.test.util.misc import TestReactorMixin
 from twisted.trial.unittest import TestCase
 from buildbot.test.util.steps import BuildStepMixin
 from buildbot.process.results import FAILURE
@@ -32,9 +33,10 @@ from buildbot.process.properties import Property
 from bb_pytest.step import Pytest
 
 
-class TestPytest(BuildStepMixin, TestCase):
+class TestPytest(BuildStepMixin, TestCase, TestReactorMixin):
 
     def setUp(self):
+        self.setUpTestReactor()
         return self.setUpBuildStep()
 
     def tearDown(self):
@@ -275,9 +277,10 @@ def call_pytest():
     return pytest.communicate()
 
 
-class TestPytestIntegration(BuildStepMixin, TestCase):
+class TestPytestIntegration(BuildStepMixin, TestCase, TestReactorMixin):
 
     def setUp(self):
+        self.setUpTestReactor()
         return self.setUpBuildStep()
 
     def tearDown(self):
