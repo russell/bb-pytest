@@ -3,7 +3,7 @@ SQLAlchemy==0.8.0b2
 Tempita==0.5.1
 Twisted==12.3.0
 argparse==1.2.1
-buildbot==0.8.7p1
+buildbot==1.8.2
 decorator==3.4.0
 distribute==0.6.31
 execnet==1.1
