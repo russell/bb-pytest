@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 from os import path
 
-version = '0.2'
+version = '0.3'
 
 changelog_header = """
 Changelog

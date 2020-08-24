@@ -14,72 +14,45 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from twisted.python import log
+from __future__ import absolute_import
+from __future__ import print_function
+from future.builtins import range
 
-from buildbot.status import testresult
-from buildbot.status.results import SUCCESS, FAILURE, WARNINGS, SKIPPED
-from buildbot.process.buildstep import LogLineObserver
-from buildbot.steps.shell import ShellCommand
-
-try:
-    import cStringIO
-    StringIO = cStringIO
-except ImportError:
-    import StringIO
 import re
 
-RESULTS_LINE = r"=+ ((?P<failures>\d+) failed|)(,? ?(?P<passed>\d+) passed|)(,? ?(?P<skips>\d+) skipped|)(,? ?(?P<deselected>\d+) deselected|)(,? ?(?P<expectedFailures>\d+) xfailed|)(,? ?(?P<unexpectedSuccesses>\d+) xpassed|)(,? ?(?P<error>\d+) error|) in [\d.]+ seconds =+"
+from twisted.internet import defer
+from twisted.python import log
+
+from buildbot.process.results import FAILURE
+from buildbot.process.results import SKIPPED
+from buildbot.process.results import SUCCESS
+from buildbot.process.results import WARNINGS
+from buildbot.process import logobserver
+from buildbot.process.buildstep import BuildStep
+from buildbot.process.buildstep import ShellMixin
 
 
-def int_or_zero(i):
-    if i is None:
-        return 0
-    return int(i)
+RE_LINE_COLLECTING = re.compile(r"^(collecting .*)(collected)(.*)(items)$")
+RE_LINE_COLLECTED = re.compile(r"^(collected)(.*)(items)$")
+RE_LINE_FAILURES = re.compile(r"^=+ FAILURES =+$")
+RE_LINE_RESULTS = re.compile(r"=+ ((?P<failures>\d+) failed|)(,? ?(?P<passed>\d+) passed|)(,? ?(?P<skips>\d+) skipped|)(,? ?(?P<deselected>\d+) deselected|)(,? ?(?P<expectedFailures>\d+) xfailed|)(,? ?(?P<unexpectedSuccesses>\d+) xpassed|)(,? ?(?P<error>\d+) error|) in [\d.]+ seconds =+")
+RE_TEST_MODES = {
+    "pytest": re.compile(r"^(?P<path>.+):\d+: (?P<testname>.+) (?P<status>.+)$"),
+    "xdist": re.compile(r"^\[.+\] (?P<status>.+) (?P<path>.+):\d+: (?P<testname>.+)$")
+    }
 
 
-def countFailedTests(output):
-    # start scanning 10kb from the end, because there might be a few kb of
-    # import exception tracebacks between the total/time line and the errors
-    # line
-    chunk = output[-10000:]
-    lines = chunk.split("\n")
-    lines.pop()  # blank line at end
-    # lines[-3] is "Ran NN tests in 0.242s"
-    # lines[-2] is blank
-    # lines[-1] is 'OK' or 'FAILED (failures=1, errors=12)'
-    #  or 'FAILED (failures=1)'
-    #  or "PASSED (skips=N, successes=N)"  (for Twisted-2.0)
-    # there might be other lines dumped here. Scan all the lines.
-    res = {'total': 0,
-           'failures': 0,
-           'skips': 0,
-           'error': 0,
-           'deselected': 0,
-           'expectedFailures': 0,
-           'unexpectedSuccesses': 0,
-           }
-    for l in lines:
-        if l.startswith("="):
-            # the extra space on FAILED_ is to distinguish the overall
-            # status from an individual test which failed. The lack of a
-            # space on the OK is because it may be printed without any
-            # additional text (if there are no skips,etc)
-            out = re.search(RESULTS_LINE, l)
-            if out:
-                res.update(dict([(k, int_or_zero(v))
-                                 for k, v in out.groupdict().items()]))
-            if res['total'] == 0:
-                res['total'] = sum(res.values())
-    return res
+class PytestTestCaseCounter(logobserver.LogLineObserver):
 
-
-class PytestTestCaseCounter(LogLineObserver):
-    numTests = 0
-    finished = False
-
-    def __init__(self, re):
-        self._line_re = re
-        LogLineObserver.__init__(self)
+    def __init__(self, pytestMode):
+        self._line_regexp = RE_TEST_MODES[pytestMode]
+        self.numTests = 0
+        self.totalTests = 0
+        self.finished = False
+        self.collecting = True
+        self.testing = False
+        self.catching = False
+        logobserver.LogLineObserver.__init__(self)
 
     def outLineReceived(self, line):
         # line format
@@ -88,44 +61,98 @@ class PytestTestCaseCounter(LogLineObserver):
         # [gw1] PASSED fixture.py:4: test_test
         if self.finished:
             return
-        if line.startswith("=" * 40):
-            self.finished = True
+
+        if (not self.testing) and (not self.catching):
+            if self.step.verbose:
+                m = RE_LINE_COLLECTING.search(line.strip())
+            else:
+                m = RE_LINE_COLLECTED.search(line.strip())
+            if m:
+                try:
+                    collected = m.group(3 if self.step.verbose else 2)
+                    self.totalTests = int(collected)
+                    self.step.description.extend(["0", "of", str(self.totalTests), "tests"])
+                    self.step.updateSummary()
+                    self.testing = True
+                    self.collecting = False
+                    self.catching = False
+                except:
+                    self.totalTests = -1
             return
 
-        m = re.search(self._line_re, line.strip())
-        if m:
+        # testing mode
+        if self.testing and line.startswith("="):
+            m = RE_LINE_FAILURES.search(line.strip())
+            if m:
+                self.step.catched_failures.append(line)
+                self.testing = False
+                self.catching = True
+                return
+
+        if (self.testing or self.catching) and line.startswith("="):
+            # check for final row with summary
+            m = RE_LINE_RESULTS.search(line.strip())
+            if m:
+                self.step.collected_results.update(dict([(k, 0 if v is None else int(v)) for k, v in m.groupdict().items()]))
+                self.step.collected_results["total"] = self.totalTests
+                self.step.description = [self.step.description[0], "finished"]
+                self.step.updateSummary()
+                self.finished = True
+                self.testing = False
+                self.catching = False
+                return
+ 
+        if self.testing and line.strip():
             self.numTests += 1
-            self.step.setProgress('tests', self.numTests)
+            self.step.description[1] = str(self.numTests)
+            self.step.updateSummary()
+            return
+  
+        if self.catching:
+            self.step.catched_failures.append(line)
+            return
 
 
 UNSPECIFIED = ()  # since None is a valid choice
-
-TEST_RE = {"pytest": r"^(?P<path>.+):\d+: (?P<testname>.+) (?P<status>.+)$",
-            "xdist": r"^\[.+\] (?P<status>.+) (?P<path>.+):\d+: (?P<testname>.+)$"}
-
-
-class Pytest(ShellCommand):
+class Pytest(BuildStep, ShellMixin):
     """
     There are some class attributes which may be usefully overridden
     by subclasses. 'pytestArgs' can influence the pytest command line.
     """
+    DEFAULT_PYTEST = 'pytest'
 
     name = "pytest"
     progressMetrics = ('output', 'tests')
 
+    description = ["testing"]
+    descriptionDone = ["testing", "finished"]
+
     renderables = ['tests']
     flunkOnFailure = True
     python = None
-    pytest = "py.test"
-    pytestMode = "pytest"  # verbose by default
-    pytestArgs = ["-v"]
+    pytest = DEFAULT_PYTEST
+    pytestMode = "pytest"
+    pytestArgs = []
+    verbose = True # verbose by default
     testpath = UNSPECIFIED  # required (but can be None)
     testChanges = False  # TODO: needs better name
     tests = None  # required
 
+    collected_results = {
+        'total': 0,
+        'failures': 0,
+        'skips': 0,
+        'error': 0,
+        'deselected': 0,
+        'expectedFailures': 0,
+        'unexpectedSuccesses': 0,
+        }
+
+    catched_failures = []
+
     def __init__(self, python=None, pytest=None,
                  testpath=UNSPECIFIED,
-                 tests=None, testChanges=None,
+                 tests=None, testChanges=None, verbose=True,
                  pytestMode=None, pytestArgs=None,
                  **kwargs):
         """
@@ -156,7 +183,11 @@ class Pytest(ShellCommand):
 
         @type pytestArgs: list of strings
         @param pytestArgs: a list of arguments to pass to pytest, available to
-                          turn on any extra flags you like. Defaults to ['-v'].
+                          turn on any extra flags you like..
+
+        @type verbose: boolean
+        @param verbose: if True, pytest runs in verbose mode (-v), othervise not verbose.
+                        Defaults to True
 
         @type  tests: list of strings
         @param tests: a list of test modules to run, like
@@ -174,24 +205,15 @@ class Pytest(ShellCommand):
 
         @type  kwargs: dict
         @param kwargs: parameters. The following parameters are inherited from
-                       L{ShellCommand} and may be useful to set: workdir,
+                       L{ShellMixin} and may be useful to set: workdir,
                        haltOnFailure, flunkOnWarnings, flunkOnFailure,
                        warnOnWarnings, warnOnFailure, want_stdout, want_stderr,
                        timeout.
         """
-        ShellCommand.__init__(self, **kwargs)
-        self.addFactoryArguments(python=python,
-                                 pytest=pytest,
-                                 testpath=testpath,
-                                 tests=tests,
-                                 testChanges=testChanges,
-                                 pytestMode=pytestMode,
-                                 pytestArgs=pytestArgs)
-
         if python:
             self.python = python
         if self.python is not None:
-            if type(self.python) is str:
+            if isinstance(self.python, str):
                 self.python = [self.python]
             for s in self.python:
                 if " " in s:
@@ -211,6 +233,8 @@ class Pytest(ShellCommand):
             self.pytestMode = pytestMode
         if pytestArgs is not None:
             self.pytestArgs = pytestArgs
+        if verbose is not None:
+            self.verbose = verbose
 
         if testpath is not UNSPECIFIED:
             self.testpath = testpath
@@ -220,7 +244,7 @@ class Pytest(ShellCommand):
 
         if tests is not None:
             self.tests = tests
-        if type(self.tests) is str:
+        if isinstance(self.tests, str):
             self.tests = [self.tests]
         if testChanges is not None:
             self.testChanges = testChanges
@@ -228,230 +252,132 @@ class Pytest(ShellCommand):
         if not self.testChanges and self.tests is None:
             raise ValueError("Must either set testChanges= or provide tests=")
 
+        if not self.pytestMode in RE_TEST_MODES:
+            raise ValueError("pytestMode must be one of: %s" % ", ".join(RE_TEST_MODES.keys()))
+
+        kwargs = self.setupShellMixin(kwargs, prohibitArgs=['command'])
+        super(Pytest, self).__init__(**kwargs)
+
+        self.observer = PytestTestCaseCounter(self.pytestMode)
+        self.addLogObserver('stdio', self.observer)
+
+
+    @defer.inlineCallbacks
+    def run(self):
+        """
+        run PyTest
+        """
         # build up most of the command, then stash it until start()
         command = []
         if self.python:
             command.extend(self.python)
         command.append(self.pytest)
         command.extend(self.pytestArgs)
-        self.command = command
+        if self.verbose:
+            command.append("-v")
 
-        self.description = ["testing"]
-        self.descriptionDone = ["tests"]
-
-        if not self.pytestMode in TEST_RE:
-            raise ValueError("pytestMode must be one of: %s" %
-                             ", ".join(TEST_RE.keys()))
-
-        # this counter will feed Progress along the 'test cases' metric
-        self.addLogObserver('stdio',
-                            PytestTestCaseCounter(TEST_RE[self.pytestMode]))
-
-    def setupEnvironment(self, cmd):
-        ShellCommand.setupEnvironment(self, cmd)
-        if self.testpath is not None:
-            e = cmd.args['env']
-            if e is None:
-                cmd.args['env'] = {'PYTHONPATH': self.testpath}
-            else:
-                #this bit produces a list, which can be used
-                #by buildslave.runprocess.RunProcess
-                ppath = e.get('PYTHONPATH', self.testpath)
-                if isinstance(ppath, str):
-                    ppath = [ppath]
-                if self.testpath not in ppath:
-                    ppath.insert(0, self.testpath)
-                e['PYTHONPATH'] = ppath
-
-    def start(self):
-        # now that self.build.allFiles() is nailed down, finish building the
-        # command
         if self.testChanges:
             for f in self.build.allFiles():
                 if f.endswith(".py"):
-                    self.command.append("--testmodule=%s" % f)
+                    command.append("--testmodule=%s" % f)
         else:
-            self.command.extend(self.tests)
-        log.msg("Pytest.start: command is", self.command)
+            command.extend(self.tests)
 
-        ShellCommand.start(self)
+        self.command = command
 
-    def commandComplete(self, cmd):
+        if self.testpath is not None:
+            # this bit produces a list, which can be used
+            # by buildbot_worker.runprocess.RunProcess
+            ppath = self.env.get('PYTHONPATH', self.testpath)
+            if isinstance(ppath, str):
+                ppath = [ppath]
+            if self.testpath not in ppath:
+                ppath.insert(0, self.testpath)
+            self.env['PYTHONPATH'] = ppath
+
+        cmd = yield self.makeRemoteShellCommand(command=command)
+
+        self.collected_results = {
+            'total': 0,
+            'failures': 0,
+            'skips': 0,
+            'error': 0,
+            'deselected': 0,
+            'expectedFailures': 0,
+            'unexpectedSuccesses': 0,
+            }
+        self.catched_failures = []
+
+        yield self.runCommand(cmd)
+
+        self.descriptionDone = self.finalDescription(cmd)
+        self.updateSummary()
+
+        if self.catched_failures:
+            self.addCompleteLog("problems", "\n".join(self.catched_failures))
+
+        defer.returnValue(cmd.results())
+
+
+    def finalDescription(self, cmd):
         # figure out all status, then let the various hook functions return
         # different pieces of it
 
-        # 'cmd' is the original pytest command, so cmd.logs['stdio'] is the
-        # pytest output.
-        output = cmd.logs['stdio'].getText()
-        counts = countFailedTests(output)
+        total = self.collected_results['total']
 
-        total = counts['total']
-        failures = counts['failures']
-        parsed = (total is not None)
-        text = []
-        text2 = ""
+        if total is None:
+            results = FAILURE
+            return ["testlog", "unparseable"]
+
+        failures = self.collected_results['failures']
+        errors = self.collected_results['error']
+        skips = self.collected_results['skips']
+        expectedFailures = self.collected_results['expectedFailures']
+        unexpectedSuccesses = self.collected_results['unexpectedSuccesses']
+        deselected = self.collected_results['deselected']
+        passed = 0
 
         if cmd.rc == 0:
-            if parsed:
-                results = SUCCESS
-                if total:
-                    text += ["%d %s" %
-                             (total,
-                              total == 1 and "test" or "tests"),
-                             ]
-                    if ((not counts['expectedFailures']) and (not counts['unexpectedSuccesses'])):
-                        text += ["passed"]
-                else:
-                    text += ["no tests", "run"]
-            else:
-                results = FAILURE
-                text += ["testlog", "unparseable"]
-                text2 = "tests"
+            results = SUCCESS
         else:
             # something failed
             results = FAILURE
-            if parsed:
-                if total:
-                    text += ["%d %s" %
-                             (total,
-                              total == 1 and "test" or "tests")]
-                else:
-                    text += ["no tests", "run"]
-                if failures:
-                    text.append("%d %s" %
-                                (failures,
-                                 failures == 1 and "failure" or "failures"))
-                count = failures
-                text2 = "%d tes%s" % (count, (count == 1 and 't' or 'ts'))
-            else:
-                text += ["tests", "failed"]
-                text2 = "tests"
 
-        if counts['error']:
-            text.append("%d %s" %  \
-                        (counts['error'],
-                         counts['error'] == 1 and "error"
-                         or "errors"))
+        text = []
+        if total:
+            passed = total
+            text.append("total %d %s" % (total, total == 1 and "test" or "tests"))
+        else:
+            text.extend(["no tests", "run"])
 
-        if counts['skips']:
-            text.append("%d %s" %
-                        (counts['skips'],
-                         counts['skips'] == 1 and "skip" or "skips"))
+        if failures:
+            passed -= failures
+            text.append("%d %s" % (failures, "failed"))
 
-        if counts['expectedFailures']:
-            text.append("%d %s" %  \
-                        (counts['expectedFailures'],
-                         counts['expectedFailures'] == 1 and "todo"
-                         or "todos"))
-            # XXX (RS) Disabled to keep inline with the trial runner
-            # results = WARNINGS
-            # if not text2:
-            #     text2 = "todo"
+        if errors:
+            passed -= errors
+            text.append("%d %s" % (errors, errors == 1 and "error" or "errors"))
 
-        if counts['unexpectedSuccesses']:
-            text.append("%d surprises" % counts['unexpectedSuccesses'])
-            # XXX (RS) Disabled to keep inline with the trial runner
-            # results = WARNINGS
-            # if not text2:
-            #     text2 = "tests"
+        if skips:
+            passed -= skips
+            text.append("%d %s" % (skips, "skiped"))
 
-        if counts['deselected']:
-            text.append("%d %s" %
-                        (counts['deselected'],
-                         "deselected"))
-        self.results = results
-        self.text = text
-        self.text2 = [text2]
+        if expectedFailures:
+            passed -= expectedFailures
+            text.append("%d %s" % (expectedFailures, expectedFailures == 1 and "todo" or "todos"))
 
-    def addTestResult(self, testname, results, text, tlog):
-        tr = testresult.TestResult(testname, results, text, logs={'log': tlog})
-        #self.step_status.build.addTestResult(tr)
-        self.build.build_status.addTestResult(tr)
+        if unexpectedSuccesses:
+            passed -= unexpectedSuccesses
+            text.append("%d %s" % (unexpectedSuccesses, "surprises"))
 
-    def createSummary(self, loog):
-        output = loog.getText()
-        problems = ""
-        sio = StringIO.StringIO(output)
-        warnings = {}
-        while 1:
-            line = sio.readline()
-            if line == "":
-                break
-            if line.find(" exceptions.DeprecationWarning: ") != -1:
-                # no source
-                warning = line  # TODO: consider stripping basedir prefix here
-                warnings[warning] = warnings.get(warning, 0) + 1
-            elif (line.find(" DeprecationWarning: ") != -1 or
-                line.find(" UserWarning: ") != -1):
-                # next line is the source
-                warning = line + sio.readline()
-                warnings[warning] = warnings.get(warning, 0) + 1
-            elif line.find("Warning: ") != -1:
-                warning = line
-                warnings[warning] = warnings.get(warning, 0) + 1
+        if deselected:
+            passed -= deselected
+            text.append("%d %s" % (deselected, "deselected"))
 
-            if line.startswith("=") and re.search(r'^=+ FAILURES =+$', line):
-                problems += line
-                problems += sio.read()
-                break
+        if passed < total:
+            text.append("%d" % passed)
 
-        if problems:
-            self.addCompleteLog("problems", problems)
-            # now parse the problems for per-test results
-            pio = StringIO.StringIO(problems)
-            pio.readline()  # eat the first separator line
-            testname = None
-            done = False
-            while not done:
-                while 1:
-                    line = pio.readline()
-                    if line == "":
-                        done = True
-                        break
-                    if line.find("=" * 60) == 0:
-                        break
-                    if line.find("-" * 60) == 0:
-                        # the last case has --- as a separator before the
-                        # summary counts are printed
-                        done = True
-                        break
-                    if testname is None:
-                        # the first line after the === is like:
-# EXPECTED FAILURE: testLackOfTB (twisted.test.test_failure.FailureTestCase)
-# SKIPPED: testRETR (twisted.test.test_ftp.TestFTPServer)
-# FAILURE: testBatchFile (twisted.conch.test.test_sftp.TestOurServerBatchFile)
-                        r = re.search(r'^([^:]+): (\w+) \(([\w\.]+)\)', line)
-                        if not r:
-                            # TODO: cleanup, if there are no problems,
-                            # we hit here
-                            continue
-                        result, name, case = r.groups()
-                        testname = tuple(case.split(".") + [name])
-                        results = {'SKIPPED': SKIPPED,
-                                   'FAILED': FAILURE,
-                                   'PASSED': SUCCESS,  # not reported
-                                   }.get(result, WARNINGS)
-                        text = result.lower().split()
-                        loog = line
-                        # the next line is all dashes
-                        loog += pio.readline()
-                    else:
-                        # the rest goes into the log
-                        loog += line
-                if testname:
-                    self.addTestResult(testname, results, text, loog)
-                    testname = None
+        if total:
+            text.append("passed")
 
-        if warnings:
-            lines = warnings.keys()
-            lines.sort()
-            self.addCompleteLog("warnings", "".join(lines))
-
-    def evaluateCommand(self, cmd):
-        return self.results
-
-    def getText(self, cmd, results):
-        return self.text
-
-    def getText2(self, cmd, results):
-        return self.text2
+        return text
