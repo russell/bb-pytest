@@ -1,4 +1,4 @@
-Release 0.3 X/X/2017
+Release 0.3 24/08/2020
 ----------------------
 
 * updated to buildbot 0.9.X.
