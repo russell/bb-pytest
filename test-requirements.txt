@@ -1,0 +1,3 @@
+buildbot[test] --no-binary buildbot  # buildbot wheel dist excludes test modules
+pytest
+flake8
