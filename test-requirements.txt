@@ -1,4 +1,3 @@
 buildbot[test]==2.9.0 --no-binary buildbot  # buildbot wheel dist excludes test modules
 pytest==6.1.2
-pyflakes==2.1.0
 flake8

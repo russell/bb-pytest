@@ -25,7 +25,7 @@ jobs:
       env:
         PYTHON_VERSION: ${{ matrix.python-version }}
       run: |
-        if [ "$PYTHON_VERSION" = "3.8" ]; then
+        if [ "$PYTHON_VERSION" = "3.8" ] || [ "$PYTHON_VERSION" = "3.9" ]; then
           exit 0
         fi
         # stop the build if there are Python syntax errors or undefined names
